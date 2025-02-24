@@ -1,0 +1,211 @@
+---
+title: "Fact Sheet 2: Marketing Strategies"
+format:
+  pdf:
+    toc: false
+    number-sections: false
+    colorlinks: true
+    fig-width: 7
+    fig-height: 5
+execute:
+  cache: true
+---
+
+**The 2023 American Seafood Harvesters Marketing Practices Survey** is the first-ever national assessment of the direct seafood sector. The survey aims to fill a gap in our understanding of the domestic seafood market in the US and bring greater focus to the socioeconomic contributions of seafood in the nation's local and regional food systems. This document describes popular direct seafood marketing strategies and is the second in a series of four that highlight findings from the survey.
+
+Through a series of focus groups with direct seafood marketers, we learned that direct seafood marketing strategies involve shorter and fairer supply chains between harvesters and the final consumer. They include seafood distribution pathways in which harvesters sell their catch directly to consumers, restaurants, institutions, and other outlets by partnering with or bypassing seafood distributors and processors (i.e., removing the "middleman").
+
+---------------------------------------------------------------------------------------
+
+### Direct sales to consumers
+
+Products are usually minimally processed and sales are conducted by close family members or facilitated by other businesses, with ownership of seafood products not changing hands until sales to consumers. Examples include off-the-boat/dock sales, farmer's markets, community-supported fisheries (CSFs), and seafood buying clubs.
+
+### Direct sales to retail
+
+Products typically processed by retailers. Ownership of a product changes hands. For example, Fishmongers, independent grocery stores, and fishermen's co-ops.
+
+### Direct sales to foodservices
+
+Seafood sales to businesses that prepare food. For example, restaurants, fast food outlets, seafood shacks, and food trucks.
+
+### Direct sales to institutions
+
+Seafood sales to organizations that do not primarily prepare food. For example, schools, prisons, universities, hospitals, and foodbanks.
+
+### Direct sales to source identified distributors (SID)
+
+Businesses not owned by the harvester or immediate family. Seafood sold through this channel differs from "conventionally marketed" seafood, in that it is accompanied by information of the vessel or seafood harvester who caught it, resulting in additional benefit to the harvester.
+
+-----------------------------------------------------------------------------------------------
+
+The percentage of direct marketing strategies used by direct seafood businesses varied by regions of the US. Direct-to-consumer sales are the most popular marketing strategy nationally and in nearly every region. Regarding specific direct marketing channels, Off the boat sales were the most popular option used by direct seafood marketers across the US. Other popular direct marketing channels varied by region, but overall direct sales to Fishmongers and Restaurants were the next most popular marketing channels.
+
+```{r setup-data}
+#| include: false
+#| message: false
+#| warning: false
+library(here)
+library(ggplot2)
+library(forcats)
+library(dplyr)
+library(usmap)
+library(purrr)
+library(tidyr)
+library(stringr)
+library(viridis)
+library(janitor)
+library(RColorBrewer)
+library(viridis)
+library(patchwork)
+
+
+# Valid survey responses
+val_resp_data <- read.csv(here("output_files","valid_svy_resp_data.csv"), header = TRUE, na.strings = c("","NA"))
+```
+
+```{r usmap-facets}
+#| echo: false
+#| message: false
+#| fig-align: center
+#| include: false
+#| layout-nrow: 1
+
+d <- us_map(regions = "states") %>% 
+  mutate(NOAA_region = fct_collapse(abbr, 'North Pacific (Alaska)' = c('AK'), 
+                         'Pacific' = c('WA','OR','CA'),
+                         'Western Pacific (Hawaii)' = c('HI'),
+                         'New England' = c('CT','MA','ME','NH','RI'),
+                         'Mid-Atlantic' = c('DE','MD','NJ','NY','VA'),
+                         'Great Lakes' = c('IL','IN','MI', 'MN','OH','PA','WI'),
+                         'South Atlantic' = c('FL','GA','NC','SC'),
+                         'Gulf of Mexico' = c('AL','LA','MS','TX'),
+                         'Other' = c('AZ','CO','MT','ND','NV','SD','UT','WY','ID','AR','IA','KS','KY','MO','NE','NM','OK','TN','VT','WV')),
+         NOAA_region = fct_relevel(NOAA_region, c("Western Pacific (Hawaii)", "New England", "Pacific", "South Atlantic", "Other", "DC", "Gulf of Mexico", "Great Lakes", "North Pacific (Alaska)", "Mid-Atlantic")))
+
+plot_usmap(data = d, regions = 'states', values = "NOAA_region") +
+  #scale_fill_viridis(discrete = TRUE)
+  scale_fill_brewer(palette = "Spectral")
+  
+A1 <- usmap::plot_usmap(data=data.frame(state='AK', s=100), values="s", color = "#08519C", linewidth = 0.1) +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")  
+
+B1 <- usmap::plot_usmap(data=data.frame(state=c('WA','OR','CA'),s=100), values="s", color = "#436AB3") +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")  
+
+C1 <- usmap::plot_usmap(data=data.frame(state='HI', s=100), values="s", color = "#436AB3") +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")  
+
+D1 <- usmap::plot_usmap(data=data.frame(state=c('CT','MA','ME','NH','RI'),s=100), values="s", color = "#436AB3") +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")
+
+E1 <- usmap::plot_usmap(data=data.frame(state=c('DE','MD','NJ','NY','VA'),s=100), values="s", color = "#436AB3") +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")
+
+F1 <- usmap::plot_usmap(data=data.frame(state=c('FL','GA','NC','SC'),s=100), values="s", color = "#436AB3") +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")
+
+G1 <- usmap::plot_usmap(data=data.frame(state=c('AL','LA','MS','TX'),s=100), values="s", color = "#436AB3") +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")
+
+H1 <- usmap::plot_usmap(data=data.frame(state=c('IL','IN','MI', 'MN','OH','PA','WI'),s=100), values="s", color = "#436AB3") +
+  scale_fill_gradient(low = "#08519C", high = "#08519C", na.value="white") + 
+  theme(legend.position = "none")
+
+us_map_facets <- A1 / B1 / C1 / D1 / E1 / F1/ G1 / H1
+```
+
+```{r reg-chnl-pct}
+#| include: false
+#| echo: true
+#| message: false
+#| warning: false
+channel_region_summary <- val_resp_data %>% 
+  pivot_longer(X0.2a:X0.2e, names_to = "channel") %>% 
+  filter(value == "Yes") %>% 
+  group_by(NOAA_region, channel) %>% 
+  count(value) %>% 
+  pivot_wider(names_from = channel, values_from = n, values_fill = list(n=0)) %>% 
+  select(-value) %>% 
+  rename(Consumer = 'X0.2a',
+         Retail = 'X0.2b',
+         Foodservice = 'X0.2c',
+         Institution = 'X0.2d',
+         SID = 'X0.2e') %>% adorn_totals()
+
+region_channel_pct <- val_resp_data %>% 
+  pivot_longer(X0.2a:X0.2e, names_to = "channel") %>% 
+  filter(value == "Yes") %>% 
+  group_by(NOAA_region) %>% 
+  #mutate(region = factor(region, 
+   #                     levels = c("Northeast", "Southeast", "West Coast", "Alaska", "Hawaii", "Great Lakes", "Landlocked"))) %>% 
+  summarise(uniqueDSM = n_distinct(ExternalReference)) %>% 
+  left_join(channel_region_summary, by = "NOAA_region") %>% 
+  bind_rows(summarise(., 
+                      across(where(is.numeric), sum),
+                      across(where(is.factor), ~"Total"))) %>% 
+  mutate(pct_consumer = round(Consumer/uniqueDSM*100,1),
+         pct_retail = round(Retail/uniqueDSM*100,1),
+         pct_foodserv = round(Foodservice/uniqueDSM*100,1),
+         pct_institution = round(Institution/uniqueDSM*100,1),
+         pct_sid = round(SID/uniqueDSM*100,1)) %>% 
+  #adorn_totals() %>% 
+  select(-c(Consumer:SID))
+
+region_channel_pct_long <- region_channel_pct %>% 
+  pivot_longer(pct_consumer:pct_sid, 
+               names_to = "channel", values_to = "pct") %>% 
+  mutate(channel = factor(channel,
+                          levels = c("pct_consumer", "pct_retail", "pct_foodserv", "pct_institution", "pct_sid"),
+                          labels = c("Consumer", "Retail", "Foodservices", "Institution", "Source Identified\n Distributors"))) %>% 
+  mutate(NOAA_region = factor(NOAA_region, 
+                              levels = c("Total", "North Pacific (Alaska)", "Pacific", "Western Pacific (Hawaii)", "New England", "Mid-Atlantic", "South Atlantic", "Gulf of Mexico", "Great Lakes", "Other"),
+                              labels = c("Total", "North Pacific (Alaska)", "Pacific", "Western Pacific (Hawaii)", "New England", "Mid-Atlantic", "South Atlantic", "Gulf of Mexico", "Great Lakes", "Other"))) %>% 
+  filter(NOAA_region != "Other")
+
+p7.2 <- ggplot(region_channel_pct_long, aes(x=channel, y=pct, fill=channel)) +
+  geom_bar(stat = "identity") +
+  scale_fill_viridis(discrete = TRUE, direction=-1) + 
+  labs(x=NULL, y=NULL) + 
+  scale_y_continuous(limits = c(0,100), expand = c(0,0)) +
+  theme_classic() +
+  theme(
+    legend.position="none",
+    panel.grid = element_blank())
+
+
+A2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "North Pacific (Alaska)")
+
+B2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "Pacific")
+
+C2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "Western Pacific (Hawaii)")
+
+D2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "New England")
+
+E2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "Mid-Atlantic")
+
+F2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "South Atlantic")
+
+G2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "Gulf of Mexico")
+
+H2 <- p7.2 %+% subset(region_channel_pct_long, NOAA_region == "Great Lakes")
+```
+
+```{r response-maps, fig.height=10, fig.width=6}
+#| echo: false
+#| message: false
+#| fig-align: center
+#| include: true
+
+(A1 + A2) / (B1 + B2) / (C1 + C2) / (D1 + D2) / (E1 + E2) / (F1 + F2) / (G1 + G2) / (H1 + H2)
+```
+Face-to-face connections with seafood customers are an approach most direct seafood marketers use. Inperson seafood sales and pick-ups were on average the most common approach to selling seafood (**85%**),
+with only **9%** of direct seafood sales conducted online with in-person pick ups and **5%** were completely online
+with seafood shipped to customer’s homes.
