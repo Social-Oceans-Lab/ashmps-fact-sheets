@@ -1,0 +1,456 @@
+---
+title: "Fact Sheet 1: Direct Seafood Sector Details"
+format:
+  pdf:
+    toc: false
+    number-sections: false
+    colorlinks: true
+    fig-width: 7
+    fig-height: 5
+execute:
+  cache: true
+---
+
+\vspace{-2cm}
+
+The 2023 American Seafood Harvesters Marketing Practices Survey is the first-ever national assessment of the direct seafood sector. The survey aims to fill a gap in our understanding of the domestic seafood market in the US and bring greater focus to the socioeconomic contributions of seafood in the nation's local and regional food systems. This document is the first in a series of four that highlight findings from the survey.
+
+```{r setup-data}
+#| include: false
+#| message: false
+#| warning: false
+library(zipcodeR)
+library(here)
+library(ggplot2)
+library(forcats)
+library(dplyr)
+library(usmap)
+library(purrr)
+library(tidyr)
+library(stringr)
+library(units)
+library(rworldmap)
+library(sf)
+library(viridis)
+library(janitor)
+library(gt)
+library(gtExtras)
+library(usmap)
+library(RColorBrewer)
+library(cowplot)
+#library(magick)
+library(choroplethrMaps)
+library(viridis)
+library(colorspace)
+library(patchwork)
+
+# Final Survey List Frame
+ashmps_final_frame <- read.csv(here("output_files","final_ASHMPS_list.csv"), header = TRUE, na.strings = c("","NA"))
+
+# Total survey responses (invalid included)
+ashmps_responses <- read.csv(here("input_lists","ashmps_responses_231121.csv"), header = TRUE, na.strings = c("","NA"))
+
+# Valid survey responses
+val_resp_data <- read.csv(here("output_files","valid_svy_resp_data.csv"), header = TRUE, na.strings = c("","NA"))
+```
+
+# Numbers of Direct Seafood Marketers and Percentage of Respondents across US regions
+
+```{r response-count}
+#| include: false
+#| echo: true
+#| message: false
+#| warning: false
+
+svy_population <- ashmps_final_frame %>% 
+  left_join(ashmps_responses, by = c("unique_ID" = "UniqueID")) %>% 
+  filter(state != "XA") %>% 
+  group_by(state) %>% 
+  tally() %>% 
+  #adorn_totals() %>% 
+  rename(pop_n = 'n')
+
+svy_response_count <- ashmps_responses %>% 
+  left_join(ashmps_final_frame, by = c("UniqueID" = "unique_ID")) %>% 
+  filter(state != "XA") %>% 
+  filter(Responded == 1) %>% 
+  group_by(state) %>% tally() %>% 
+  rename(resp_n = 'n')
+
+svy_valid_count <- val_resp_data %>% 
+  group_by(state) %>% tally() %>% 
+  rename(val_n = 'n')
+
+svy_response_bkdown <- svy_population %>% 
+  left_join(svy_response_count, by = "state") %>% 
+  left_join(svy_valid_count, by = "state") %>% 
+  mutate_if(is.numeric,coalesce,0) %>% 
+  mutate(NOAA_region = fct_collapse(state, 'North Pacific (Alaska)' = c('AK'), 
+                         'Pacific' = c('WA','OR','CA'),
+                         'Western Pacific (Hawaii)' = c('HI'),
+                         'New England' = c('CT','MA','ME','NH','RI'),
+                         'Mid-Atlantic' = c('DE','MD','NJ','NY','VA'),
+                         'Great Lakes' = c('IL','IN','MI', 'MN','OH','PA','WI'),
+                         'South Atlantic' = c('FL','GA','NC','SC'),
+                         'Gulf of Mexico' = c('AL','LA','MS','TX'),
+                         'Other' = c('AZ','CO','MT','ND','NV','SD','UT','WY','ID','AR','IA','KS','KY','MO','NE','NM','OK','TN','VT','WV', 'XA', 'VI','PR'))) %>% 
+  mutate(pct_resp = round(resp_n/pop_n*100,1),
+         pct_val = round(val_n/pop_n*100,1)) %>% 
+  group_by(NOAA_region) %>% 
+  mutate(region_pop = sum(pop_n),
+         region_resp = sum(resp_n),
+         region_val = sum(val_n),
+         region_pct_resp = round(region_resp/region_pop,3),
+         region_pct_val = round(region_val/region_pop,3)) %>% 
+  adorn_totals()
+  
+data("state.regions")
+svy_resp_map <- state.regions %>% 
+  left_join(svy_response_bkdown, by = c("abb" = "state")) %>% 
+  mutate(across(where(is.numeric), ~ replace_na(.x, 0))) %>% 
+  rename(fips = fips.character) %>% 
+  adorn_totals()
+
+
+
+e1 <- plot_usmap(data = svy_resp_map, values = "region_pop", color = "white", linewidth = 0) +
+  scale_fill_binned_sequential(palette = "Viridis", 
+                               begin = 0,
+                               breaks = c(30, 50, 500, 1000, 1300, 1500),
+                               na.value = "white",
+                               name = "N = 6630") + 
+  labs(title = "Number of Direct\n Marketers Contacted") +
+  theme(legend.position.inside = c(.5,0),
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        #legend.spacing.x = unit(2.0, 'cm'),
+        legend.key.width = unit(2.25, 'lines'),
+        legend.background = element_rect(color = "transparent"),
+        #legend.text = element_text(margin = margin(r=30, unit = "pt")),
+        plot.title = element_text(size = 20, hjust = 0.5, vjust = 0),
+        plot.margin = margin(t=-1,r=-1, b=2, l=-1)) + 
+  guides(fill = guide_colorsteps(title.position = "top", 
+                                   title.hjust = 1,
+                                   label.position = "bottom")) 
+        
+e1
+
+e2 <- plot_usmap(data = svy_resp_map, values = "region_pct_resp", color = "white", linewidth = 0) +
+  scale_fill_binned_sequential(palette = "Mako", 
+                               begin = 0,
+                               breaks = c(0.05, 0.10, 0.15, 0.20, 0.25, 30),
+                               na.value = "white",
+                               name = "N = 1222",
+                               labels = scales::label_percent(accuracy = 1L)) + 
+  labs(title = "Percent Responded") +
+  theme(legend.position = c(.5,0),
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        #legend.box.background = element_blank(),
+        legend.key.width = unit(1.75, 'lines'),
+        plot.title = element_text(size = 20, hjust = 0.5, vjust = 0),
+        plot.margin = margin(t=-1,r=-1, b=2, l=-1)) +
+  guides(fill = guide_colorsteps(title.position = "top", 
+                                   title.hjust = 1,
+                                   label.position = "bottom"))  
+
+e3 <- plot_usmap(data = svy_resp_map, values = "region_pct_val", color = "white", linewidth = 0) +
+  scale_fill_binned_sequential(palette = "Mako", 
+                               begin = 0,
+                               breaks = c(0.06, 0.08, 0.10, 0.12, 0.14),
+                               na.value = "white",
+                               name = "N = 604",
+                               labels = scales::label_percent()) +
+  labs(title = "Percent of Direct\n Marketer Responses") +
+  theme(legend.position = c(.5,0),
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        legend.box.background = element_rect(color = "transparent"),
+        legend.key.width = unit(1.5, 'lines'),
+        plot.title = element_text(size = 20, hjust = 0.5, vjust = 0),
+        plot.margin = margin(t=-1,r=-1, b=2, l=-1)) + 
+  guides(fill = guide_colorsteps(title.position = "top", 
+                                   title.hjust = 1,
+                                 label.hjust = 0.5,
+                                   label.position = "bottom")) 
+
+e4 <- e1 + e2 + e3
+
+#6649 surveys
+#1222 responses
+#604 valid
+
+```
+
+```{r response-maps, fig.height=6, fig.width=10}
+#| echo: false
+#| message: false
+#| fig-align: center
+#| include: true
+#| layout-nrow: 1
+
+e1
+e2
+e3
+```
+
+|                                                                                                          |                                                                             |                                                                                       |
+|:--------------------------------------------------------------------------------------------------------:|:---------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------:|
+| The survey was distributed to **6649** direct seafood marketers and businesses across the United States. | Of the direct seafood marketers contacted, **18%** responded to the survey. | Amongst survey respondents, **54%** actively engaged in direct seafood sales in 2022. |
+
+# Commercial fishing vessels and direct marketing
+
+Fishing vessels from each US region supply seafood to direct marketing businesses. At **25%**, New England has the greatest number of fishing vessels supplying to the direct seafood businesses, followed by the Gulf of Mexico (**21%**).
+
+```{r fleet}
+#| include: false
+#| echo: true
+#| message: false
+#| warning: false
+fleet <- val_resp_data %>% 
+  select(ExternalReference, NOAA_region, X6.8_1:X6.8_3) %>% 
+  mutate_at(c('X6.8_1', 'X6.8_2', 'X6.8_3'), as.numeric) %>% 
+  mutate(fleet_size = X6.8_1 + X6.8_2 - X6.8_3) %>% 
+  mutate_if(is.numeric,coalesce,0) %>% 
+  mutate(NOAA_region = as.factor(NOAA_region)) %>% 
+  dplyr::group_by(NOAA_region) %>% 
+  mutate(NOAA_region = fct_recode(NOAA_region,
+                                  Alaska = "North Pacific (Alaska)",
+                                  'West Coast' = "Pacific",
+                                  Hawaii = "Western Pacific (Hawaii)",
+                                  'Great Lakes' = "Other",
+                                  'Great Lakes' = "Great Lakes")) %>% 
+  dplyr::summarise(fleet_size = sum(fleet_size))
+
+```
+
+```{r fleet-plot, fig.height=3, fig.width=4.5}
+#| echo: false
+#| message: false
+#| fig-align: center
+#| include: true
+
+ggplot(data = fleet, aes(y= reorder(NOAA_region, fleet_size), x= fleet_size)) + 
+  geom_bar(position = "dodge", stat = 'identity', fill =  "#062539") +
+  geom_text(aes(label = fleet_size), 
+            position = position_dodge(width = 0.5),    # move to center of bars
+            hjust = 0, vjust = 0.5,   # nudge above top of bar
+            size = 4) + 
+  labs(x=NULL, y = NULL) + 
+  scale_x_continuous(expand = c(0,0), limits = c(0, 420)) + 
+  theme_classic()
+```
+
+```{r ownership}
+#| include: false
+#| echo: true
+#| message: false
+#| warning: false
+ownership_overall <- val_resp_data %>% 
+  select(ExternalReference, NOAA_region, X7.1) %>% 
+  group_by(X7.1) %>%
+  drop_na() %>% 
+  summarise(count = n()) %>% 
+  mutate(prop = round(count / sum(count),3))
+
+ownership_region <- val_resp_data %>% 
+  select(ExternalReference, NOAA_region, X7.1) %>% 
+  group_by(NOAA_region, X7.1) %>%
+  drop_na() %>% 
+  summarise(count = n()) %>% 
+  mutate(prop = round(count / sum(count),3))
+```
+
+# 90% Family Owned
+
+Nearly **90%** of direct seafood businesses are family owned. Most were in New England, particularly Maine, followed by Alaska.
+
+\newpage
+# Reported numbers of employees by Type and Sex with Regional Totals
+
+Survey respondents were also asked to provide details about employees in their seafood business, providing an initial glimpse of the labor force in the direct seafood sector. **60%** of workers were employed full-time. **19%** of employees were female, with the majority working part-time.
+
+```{r employment}
+#| include: false
+#| echo: true
+#| message: false
+#| warning: false
+employment <- val_resp_data %>% 
+  select(ExternalReference, NOAA_region, X6.9_1_1:X6.9_2_4) %>% 
+  mutate_at(c('X6.9_1_1', 'X6.9_1_2', 'X6.9_1_4',
+              'X6.9_2_1', 'X6.9_2_2', 'X6.9_2_4'), as.numeric) %>% 
+  filter(X6.9_1_1 != 13000) %>% 
+  pivot_longer(cols = c(X6.9_1_1:X6.9_2_4),
+               names_to = "Gender_Work",
+               names_prefix = "X6.9_",
+               values_to = "number") %>% 
+  separate_wider_delim(Gender_Work, "_", names = c("Gender", "Work")) %>% 
+  mutate(Gender = if_else(Gender == "1", "Male", Gender),
+         Gender = if_else(Gender == "2", "Female", Gender),
+         Work = if_else(Work == "1", "Full-time", Work),
+         Work = if_else(Work == "2", "Part-time", Work),
+         Work = if_else(Work == "4", "Unpaid", Work),
+         NOAA_region = fct_recode(NOAA_region,
+                                  Alaska = "North Pacific (Alaska)",
+                                  'West Coast' = "Pacific",
+                                  Hawaii = "Western Pacific (Hawaii)")) %>% 
+  group_by(NOAA_region, 
+           Gender, 
+           Work) %>% 
+  #replace(is.na(.), 0) %>% 
+  #filter(number != 0) %>% 
+  summarise(num_workers = sum(number),
+            mean_workers = mean(number))
+
+e1 <- employment %>% 
+  group_by(NOAA_region, Work) %>% 
+  replace_na(list(num_workers = 0)) %>% 
+  summarise(num_workers = sum(num_workers)) %>% 
+  filter(NOAA_region != "Other") %>% 
+  ggplot(aes(y = reorder(NOAA_region, num_workers, sum), x = num_workers, fill = Work)) +
+  geom_bar(position = "stack", stat = 'identity') +
+  geom_text(aes(label = after_stat(x), group = NOAA_region), 
+            stat = 'summary', fun = sum, hjust = 1) +
+  #scale_fill_brewer(type = "seq", palette = "Reds", 
+   #                 guide = guide_legend(reverse = FALSE)) +
+  scale_fill_manual(values = c("#FFBEB3", "#F37F5F", "#C15227")) +
+  labs(x="Count by Employee Type", y = "") +
+  #coord_flip() +
+  scale_x_reverse(expand = c(0,0), limits = c(750,0)) + 
+  scale_y_discrete(position = "right") +
+  theme_classic() +
+  theme(legend.position = "top",
+        legend.justification = "right",
+        legend.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.x = element_text(size = 12),
+        plot.margin=unit(c(0.1,-10,.1,0.2),"cm")
+        )
+
+e2 <- employment %>% 
+  group_by(NOAA_region, Gender) %>% 
+  replace_na(list(num_workers = 0)) %>% 
+  summarise(num_workers = sum(num_workers)) %>% 
+  filter(NOAA_region != "Other") %>% 
+  ggplot(aes(y = reorder(NOAA_region, num_workers, sum), x = num_workers, fill = fct_rev(Gender))) +
+  geom_col(position = "stack") +
+  #scale_fill_brewer(type = "seq", palette = "Paired", 
+   #                 guide = guide_legend(reverse = TRUE)) +
+  scale_fill_manual(values = c("#93B1FA", "#436AB3"),
+                    guide = guide_legend(reverse = TRUE)) +
+  labs(x="Count by Sex", y = "") +
+  scale_x_continuous(expand = c(0,0), limits = c(0, 750)) + 
+  #coord_flip() +
+  theme_classic() +
+  theme(legend.position = "top",
+        legend.justification = "left",
+        legend.title = element_blank(),
+        axis.text.y = element_text(hjust = 0.5, vjust = 0.5, size = 14,
+                                   margin = margin(r = 20)), #moves text away from axis
+        axis.title.x = element_text(size = 12),
+        plot.margin=unit(c(0.1,0.2,0.1,-10),"cm")
+        )
+employment_2 <- e1 + e2
+```
+
+```{r employment-plot, fig.height=3, fig.width=7}
+#| echo: false
+#| message: false
+#| fig-align: center
+#| include: true
+#| layout-nrow: 1
+employment_2
+```
+
+# Who's at the helm?
+
+```{r demograph-data}
+#| include: false
+#| echo: true
+#| message: false
+#| warning: false
+demograph <- val_resp_data %>% 
+  select(ExternalReference, NOAA_region, state, Q102_1:X7.2f_4_4) %>% 
+  rename(P1_Sex = Q102_1,
+         P2_Sex = Q102_2,
+         P3_Sex = Q102_3,
+         P4_Sex = Q102_4,
+         P1_Age = X7.2b_1_1,
+         P2_Age = X7.2b_1_2,
+         P3_Age = X7.2b_1_3,
+         P4_Age = X7.2b_1_4,
+         P1_Occu = X7.2e_1,
+         P2_Occu = X7.2e_2,
+         P3_Occu = X7.2e_3,
+         P4_Occu = X7.2e_4,
+         P1_Exp = X7.2f_1_4,
+         P2_Exp = X7.2f_2_4,
+         P3_Exp = X7.2f_3_4,
+         P4_Exp = X7.2f_4_4,
+         P1_Hispanic = X7.2c_1,
+         P2_Hispanic = X7.2c_2,
+         P3_Hispanic = X7.2c_3,
+         P4_Hispanic = X7.2c_4,
+         P1_Race = X7.2d_1,
+         P2_Race = X7.2d_2,
+         P3_Race = X7.2d_3,
+         P4_Race = X7.2d_4,
+         P1_Tribe = X7.2d2_1_1, 
+         P2_Tribe = X7.2d2_1_5, 
+         P3_Tribe = X7.2d2_1_6, 
+         P4_Tribe = X7.2d2_1_7) %>% 
+  mutate(P2_Exp = as.numeric(P2_Exp),
+         P4_Exp = as.numeric(P4_Exp)) %>% 
+  pivot_longer(cols = c(P1_Sex:P4_Exp),
+               names_to = c("Person", ".value"),
+               names_sep = "_") %>% 
+  filter(!if_all(c(Sex:Exp), is.na))
+
+decision_makers <- demograph %>% 
+  mutate(Age = as.numeric(Age),
+         Exp = as.numeric(Exp)) %>% 
+  group_by(NOAA_region) %>% 
+  #drop_na() %>% 
+  summarise(count = n(),
+            median_age = median(Age, na.rm = TRUE),
+            min_age = min(Age, na.rm = TRUE),
+            max_age = max(Age, na.rm = TRUE),
+            fish_exp = mean((2023-Exp), na.rm = TRUE)) %>% 
+  mutate(prop_sex = round(count /sum(count),2)) %>% 
+  drop_na()
+
+age_range <- demograph %>% 
+  mutate(Age = as.numeric(Age)) %>% 
+  drop_na(Age) %>% 
+  mutate(Age_range = cut(Age, breaks = c(18,30,45,60,75,100))) %>% 
+  group_by(Age_range) %>% 
+  tally() %>% 
+  mutate(Percent_age = round(n/sum(n),2)) %>% 
+  adorn_totals()
+
+work_exp <- demograph %>% 
+  mutate(Exp = as.numeric(Exp)) %>% 
+  group_by(Sex) %>% 
+  summarise(count = n(),
+            avg_exp = round(mean((2023-Exp), na.rm = TRUE),0))
+
+race <- demograph %>% 
+  select(ExternalReference, state, NOAA_region, Race) %>% 
+  separate_longer_delim(Race, delim = ",") %>% 
+  mutate(OMB_Race = fct_collapse(Race, 'White' = c('White'), 
+                         'Asian' = c('Japanese','Vietnamese','Other Asian', 'Chinese', 'Filipino', 'Korean'),
+                         'Native Hawaiaan or Other Pacific Islander' = c('Native Hawaiian', 'Other Pacific Islander or Chamorro or Samoan'),
+                         'Black or African American' = c('Black or African American'),
+                         'American Indian or Alaska Native' = c('American Indian or Alaska Native'))) %>% 
+  group_by(OMB_Race) %>% tally() %>% 
+  mutate(prop = round(n/sum(n),2)) %>% 
+  arrange(-n) %>% adorn_totals(where = "row")
+```
+
+Direct seafood marketers were also surveyed about the details of individuals involved in decisionmaking in direct seafood businesses. Among decision-makers in direct seafood businesses, **35%** were between 60 and 75 years old, **31%** were between 45 and 59, and **27%** were younger than 44 years old. In terms of length of experience fishing and with seafood sales, men had on average **34** years of experience compared to women with **20** years of experience. With regards to race and ethnicity, **78%** of reported decision-makers were white, followed by **7%** Asian. American Indians and Pacific Islanders were a combined **5%**, with only **2%** of Black or African Americans reported as decision-makers for direct seafood businesses.

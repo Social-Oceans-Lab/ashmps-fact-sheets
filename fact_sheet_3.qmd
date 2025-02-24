@@ -1,0 +1,535 @@
+---
+title: "Fact Sheet 3: Direct Seafood Sales"
+format:
+  pdf:
+    toc: false
+    number-sections: false
+    colorlinks: true
+    fig-width: 7
+    fig-height: 5
+execute:
+  cache: true
+---
+
+\vspace{-2cm}
+
+The 2023 American Seafood Harvesters Marketing Practices Survey is the first-ever national assessment of the direct seafood sector. The survey aims to fill a gap in our understanding of the domestic seafood market in the US and bring greater focus to the socioeconomic contributions of seafood in the nation's local and regional food systems. This document describes trends in direct seafood sales and is the third in a series of four that highlight findings from the survey.
+
+```{r libraries}
+#| include: false
+#| message: false
+#| warning: false
+library(zipcodeR)
+library(here)
+library(ggplot2)
+library(forcats)
+library(dplyr)
+library(usmap)
+library(purrr)
+library(tidyr)
+library(stringr)
+library(units)
+library(rworldmap)
+library(sf)
+library(viridis)
+library(janitor)
+library(gt)
+library(gtExtras)
+library(usmap)
+library(RColorBrewer)
+library(cowplot)
+library(magick)
+```
+
+```{r dataframes}
+#| message: false
+#| warning: false
+#| echo: false
+#| include: false
+val_resp_data <- read.csv(here("output_files","valid_svy_resp_data.csv"), header = TRUE, na.strings = c("","NA"))
+```
+
+```{r wrangling}
+#| echo: false
+#| message: false
+#| warning: false
+#| results: hide
+#| include: false
+simple_zip <- zip_code_db %>% 
+  select(zipcode, lat, lng)
+
+val_resp_zip <- val_resp_data %>% 
+  mutate(zipcode = substr(zip, 1,5)) %>% 
+  mutate(zipcode = str_pad(zipcode, 5, pad = "0", side = "left")) %>% 
+  left_join(simple_zip, by = "zipcode") %>% 
+  drop_na(zipcode, lng) %>% 
+  select(ExternalReference, NOAA_region, state, zipcode, lng, lat, X6.5_1:X6.5_3) %>% 
+  rename('less_100_miles' = "X6.5_1",
+         'bet_100_400_miles' = "X6.5_2",
+         'great_400_miles' = "X6.5_3")
+```
+
+```{r seafood}
+#| include: false
+#| echo: false
+#| message: false
+#| warning: false
+
+seafood_categ <- val_resp_data %>% 
+  select(ExternalReference, NOAA_region, state, X6.4.2_1:X6.4.2.2_4) %>% 
+  rename(Direct_Live = "X6.4.2_1",
+         Direct_Fresh_chilled = "X6.4.2_2",
+         Direct_Frozen = "X6.4.2_3",
+         Direct_Canned = "X6.4.2_4",
+         Direct_Smoked = "X6.4.2_5",
+         Direct_Dried_cured = "X6.4.2_6",
+         Direct_Finfish = "X6.4.2.2_1",
+         Direct_Crustaceans = "X6.4.2.2_2",
+         Direct_Mollusks = "X6.4.2.2_3",
+         Direct_Seaweed = "X6.4.2.2_4") 
+
+seafood_numbers <- seafood_categ %>% 
+  pivot_longer(cols = c(Direct_Live:Direct_Dried_cured),
+               names_to = "product",
+               values_to = "prod_n") %>% 
+  mutate(product = fct_collapse(product, 'Live' = 'Direct_Live', 
+                                'Chilled' = 'Direct_Fresh_chilled',
+                                'Frozen' = 'Direct_Frozen',
+                                'Canned, Smoked, or Dried' = c('Direct_Canned', 'Direct_Smoked', 'Direct_Dried_cured'))) %>% 
+  pivot_longer(cols = c(Direct_Finfish:Direct_Seaweed),
+               names_to = "type",
+               values_to = "type_n") %>%
+  filter(prod_n == "Yes" & type_n == "Yes") %>% 
+  mutate(type = as_factor(type) %>% fct_recode("Finfish" = "Direct_Finfish", "Crustaceans" = "Direct_Crustaceans", "Mollusks" = "Direct_Mollusks")) %>% 
+  group_by(product) %>% tally()
+
+seafood_stats <- seafood_categ %>% 
+  pivot_longer(cols = c(Direct_Live:Direct_Dried_cured),
+               names_to = "product",
+               values_to = "prod_n") %>% 
+  mutate(product = fct_collapse(product, 'Live' = 'Direct_Live', 
+                                'Chilled' = 'Direct_Fresh_chilled',
+                                'Frozen' = 'Direct_Frozen',
+                                'Canned, Smoked, or Dried' = c('Direct_Canned', 'Direct_Smoked', 'Direct_Dried_cured'))) %>% 
+  pivot_longer(cols = c(Direct_Finfish:Direct_Seaweed),
+               names_to = "type",
+               values_to = "type_n") %>%
+  filter(prod_n == "Yes" & type_n == "Yes") %>% 
+  mutate(type = as_factor(type) %>% fct_recode("Finfish" = "Direct_Finfish", "Crustaceans" = "Direct_Crustaceans", "Mollusks" = "Direct_Mollusks")) %>% 
+  tabyl(type, product, show_missing_levels = FALSE) %>% 
+  adorn_percentages("all") %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns()
+
+seafood_tabyl <- seafood_categ %>% 
+  pivot_longer(cols = c(Direct_Live:Direct_Dried_cured),
+               names_to = "product",
+               values_to = "prod_n") %>% 
+  mutate(product = fct_collapse(product, 'Live' = 'Direct_Live', 
+                                'Chilled' = 'Direct_Fresh_chilled',
+                                'Frozen' = 'Direct_Frozen',
+                                'Canned, Smoked, or Dried' = c('Direct_Canned', 'Direct_Smoked', 'Direct_Dried_cured'))) %>% 
+  pivot_longer(cols = c(Direct_Finfish:Direct_Seaweed),
+               names_to = "type",
+               values_to = "type_n") %>%
+  filter(prod_n == "Yes" & type_n == "Yes") %>% 
+  mutate(type = as_factor(type) %>% fct_recode("Finfish" = "Direct_Finfish", "Crustaceans" = "Direct_Crustaceans", "Mollusks" = "Direct_Mollusks")) %>% 
+  tabyl(type, product, NOAA_region, show_missing_levels = FALSE) %>% 
+  adorn_percentages("all") %>% 
+  bind_rows(.id = "NOAA_region") %>% 
+  pivot_longer(cols = c("Canned, Smoked, or Dried":Live),
+               names_to = "product",
+               values_to = "pct") %>% 
+  filter(type != "Direct_Seaweed") %>% 
+  drop_na() %>% ungroup() %>% 
+  arrange(desc(pct)) %>% 
+  group_by(NOAA_region) %>% slice(1:4) %>% 
+  mutate(pct = paste0(round(pct*100,0), '%'))
+
+hawaii <- gt(seafood_tabyl %>% filter(NOAA_region == "Western Pacific (Hawaii)") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(210),
+             pct ~ px(50)) %>% 
+  tab_header(title = "Hawaii") %>% 
+  tab_options(table.background.color = "red4",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "hawaii_tab.png"))
+
+new_england <- gt(seafood_tabyl %>% filter(NOAA_region == "New England") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(200),
+             pct ~ px(50)) %>% 
+  tab_header(title = "New England") %>% 
+  tab_options(table.background.color = "indianred3",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "new_england_tab.png"))
+
+w_coast <- gt(seafood_tabyl %>% filter(NOAA_region == "Pacific") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(200),
+             pct ~ px(50)) %>% 
+  tab_header(title = "Pacific Coast") %>% 
+  tab_options(table.background.color = "darkorange3",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "w_coast_tab.png"))
+
+s_atlant <- gt(seafood_tabyl %>% filter(NOAA_region == "South Atlantic") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(200),
+             pct ~ px(50)) %>% 
+  tab_header(title = "South Atlantic") %>% 
+  tab_options(table.background.color = "lightsalmon3",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "s_atlant_tab.png"))
+
+gom <- gt(seafood_tabyl %>% filter(NOAA_region == "Gulf of Mexico") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(200),
+             pct ~ px(50)) %>% 
+  tab_header(title = "Gulf of Mexico") %>% 
+  tab_options(table.background.color = "seagreen3",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "gom_tab.png"))
+
+grt_lakes <- gt(seafood_tabyl %>% filter(NOAA_region == "Great Lakes") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(210),
+             pct ~ px(50)) %>% 
+  tab_header(title = "Great Lakes") %>% 
+  tab_options(table.background.color = "aquamarine4",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "grt_lakes_tab.png"))
+
+alaska <- gt(seafood_tabyl %>% filter(NOAA_region == "North Pacific (Alaska)") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(210),
+             pct ~ px(50)) %>% 
+  tab_header(title = "Alaska") %>% 
+  tab_options(table.background.color = "dodgerblue3",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "alaska_tab.png"))
+
+mid_atlant <- gt(seafood_tabyl %>% filter(NOAA_region == "Mid-Atlantic") %>% ungroup() %>% select(-NOAA_region)) %>% 
+  cols_label(type = "Seafood Type",
+             product = "Processed Form",
+             pct = "%") %>% 
+  cols_align(align = "left", columns = type) %>% 
+  cols_width(type ~px(120),
+             product ~ px(200),
+             pct ~ px(50)) %>% 
+  tab_header(title = "Mid-Atlantic") %>% 
+  tab_options(table.background.color = "mediumpurple3",
+              table_body.hlines.color = "white",
+              heading.border.bottom.color = "white",
+              stub.border.color = "white",
+              table.border.bottom.color = "white",
+              table.border.top.color = "white",
+              column_labels.border.bottom.color = "white",
+              table_body.border.bottom.color = "white") %>% 
+  opt_table_font(font = google_font("Chivo")) %>% 
+  gtsave(here("output_tables", "mid_atlant_tab.png"))
+
+
+d <- us_map(regions = "states") %>% 
+  mutate(NOAA_region = fct_collapse(abbr, 'North Pacific (Alaska)' = c('AK'), 
+                         'Pacific' = c('WA','OR','CA'),
+                         'Western Pacific (Hawaii)' = c('HI'),
+                         'New England' = c('CT','MA','ME','NH','RI'),
+                         'Mid-Atlantic' = c('DE','MD','NJ','NY','VA'),
+                         'Great Lakes' = c('IL','IN','MI', 'MN','OH','PA','WI'),
+                         'South Atlantic' = c('FL','GA','NC','SC'),
+                         'Gulf of Mexico' = c('AL','LA','MS','TX'),
+                         'Other' = c('AZ','CO','MT','ND','NV','SD','UT','WY','ID','AR','IA','KS','KY','MO','NE','NM','OK','TN','VT','WV')),
+         NOAA_region = fct_relevel(NOAA_region, c("Western Pacific (Hawaii)", "New England", "Pacific", "South Atlantic", "Other", "DC", "Gulf of Mexico", "Great Lakes", "North Pacific (Alaska)", "Mid-Atlantic")))
+
+region_map <- plot_usmap(data = d, regions = 'states', values = "NOAA_region", color = "grey30", linewidth = 0.1) +
+  #scale_fill_viridis(discrete = TRUE)
+  #scale_fill_brewer(palette = "Spectral") +
+  scale_fill_manual(values = c("red4", "indianred3", "darkorange3", "lightsalmon3", "mintcream", "ghostwhite", "seagreen3", "aquamarine4", "dodgerblue3", "mediumpurple3")) +
+  theme(legend.position = "none")
+  
+# Set up Plot parameters
+background_color = "#ffffff"
+canvas <- grid::rectGrob(x=0, y=0,
+                         width = 8, height = 4.5, 
+                         gp = grid::gpar(
+                           fill = background_color,
+                           alpha = 1,
+                           col = background_color))
+
+ak_img <- magick::image_read(here("output_tables", "alaska_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+gom_img <- magick::image_read(here("output_tables", "gom_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+s_atlant_img <- magick::image_read(here("output_tables", "s_atlant_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+grt_lakes_img <- magick::image_read(here("output_tables", "grt_lakes_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+new_eng_img <- magick::image_read(here("output_tables", "new_england_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+hawaii_img <- magick::image_read(here("output_tables", "hawaii_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+mid_atlant_img <- magick::image_read(here("output_tables", "mid_atlant_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+w_coast_img <- magick::image_read(here("output_tables", "w_coast_tab.png")) %>% 
+  image_ggplot(interpolate = TRUE)
+
+```
+
+# Direct Seafood is Varied
+
+From Gulf Shrimp to Alaskan Salmon, Monkfish to Sea Urchins, a variety of marine and freshwater species are directly sold across the US. They are sold in different forms of processed seafood, including live, chilled, flash frozen, and canned or smoked. Out of all the seafood categories, chilled finfish was the most commonly sold by direct seafood businesses **(21%)**. The next popular seafood category was live crustaceans (lobster, crab, etc.) **(16%)**.
+
+In terms of the type of marine species sold directly, finfish were most commonly handled **(45%)**, followed by crustaceans **(35%)** and mollusks **(17%)**. Similarly, among processed seafood forms, chilled products were popular **(36%)**, followed by live seafood **(32%)**, frozen seafood **(17%)**, and canned or smoked or dried **(14%)**. Across the regions of the US, seafood sold by direct seafood businesses varied by category and popularity (see below).
+
+## Popular Directly Sold Seafood Products by Region
+
+```{r cowplot, fig.width=8, fig.height=4.5}
+#| echo: false
+#| message: false
+#| fig-align: center
+#| include: true
+ggdraw(ylim = c(0,1), xlim = c(0,1)) +
+  draw_grob(canvas, x=0, y=1,
+            height = 4.5, width = 7.5,
+            hjust = 0, vjust = 1) +
+  draw_plot(ak_img,
+            x = 0, y=0.7, 
+            height = 0.3, width = 0.3,
+            hjust = 0) +
+  draw_plot(grt_lakes_img,
+            x = 0.35, y=0.7, 
+            height = 0.3, width = 0.3,
+            hjust = 0) + 
+  draw_plot(new_eng_img,
+            x = 0.7, y=0.7, 
+            height = 0.3, width = 0.3,
+            hjust = 0) +
+  draw_plot(w_coast_img,
+            x = 0.0, y=0.35, 
+            height = 0.3, width = 0.3,
+            hjust = 0) +
+  draw_plot(mid_atlant_img,
+            x = 0.7, y=0.35, 
+            height = 0.3, width = 0.3,
+            hjust = 0) +
+  draw_plot(hawaii_img,
+            x = 0, y=0, 
+            height = 0.3, width = 0.3,
+            hjust = 0) +
+  draw_plot(gom_img,
+            x = 0.35, y=0, 
+            height = 0.3, width = 0.3,
+            hjust = 0) +
+  draw_plot(s_atlant_img,
+            x = 0.7, y=0, 
+            height = 0.3, width = 0.3,
+            hjust = 0) +
+  draw_plot(region_map,
+            x = 0.22, y = 0.21,
+            height = 0.55, width = 0.55,
+            hjust = 0)
+
+ggsave(here("output_figs","seafood_product_map.png"), width = 7.5, height = 4.5, dpi = 300, units = "in")
+```
+
+\newpage
+
+# Direct Seafood Marketing is Local
+
+Direct seafood marketers were asked what percentage of their seafood was sold within 100 miles, between 100 and 400 miles, and greater than 400 miles. On average, **77%** of direct seafood was sold less than 100 miles away. Meanwhile, **6%** and **8%** of directly sold seafood was delivered 100 to 400 miles away and greater than 400 miles, respectively. This highlights the importance of direct seafood market in local seafood systems.
+
+```{r geographic analysis}
+#| echo: false
+#| message: false
+#| warning: false
+#| include: false
+points_sf <- sf::st_as_sf(val_resp_zip, coords = c("lng", "lat"), crs = 4326)
+
+point_100mi <- st_buffer(points_sf %>% 
+                           filter(less_100_miles >= 1), units::as_units(100, 'miles'))
+
+point_250mi <- st_buffer(points_sf %>% 
+                           filter(bet_100_400_miles >= 1), units::as_units(250, 'miles'))
+
+point_400mi <- st_buffer(points_sf %>% 
+                           filter(great_400_miles >= 1), units::as_units(400, 'miles'))
+
+sf::sf_use_s2(FALSE) #Turn off spherical geometry
+
+worldMap <- rworldmap::getMap(resolution = 'high')
+usa_50 <- worldMap[which(worldMap$continent == "North America"), ]
+
+seafood_heatmap <- ggplot() +
+  geom_polygon(data = usa_50,
+               aes(long, lat, group = group),
+               color = "grey20",
+               fill = "grey60",
+               linewidth = 0.3) +
+  geom_sf(data = point_400mi, aes(fill = ">400 mi"), alpha = 0.1, color = NA, show.legend = "polygon") +
+  geom_sf(data = point_250mi, aes(fill = "100-400 mi"), alpha = 0.1, color = NA, show.legend = "polygon") +
+  geom_sf(data = point_100mi, aes(fill = "<100 mi"), alpha = 0.1, color = NA, show.legend = "polygon") +
+  geom_sf(data = points_sf, color = 'blue', size = 0.3) +
+  coord_sf(xlim = c(-179,-60), ylim = c(15,75), expand = FALSE) + 
+  scale_fill_manual(name = NULL, breaks = c("<100 mi", "100-400 mi", ">400 mi"),
+                    values = c(">400 mi" = "#228B22", "100-400 mi" = "#FFD700", "<100 mi" = "#EE5C42"),
+                    guide = guide_legend(override.aes = list(linetype = c("blank", "solid", "blank"),
+                                                             shape = c(20,20,20),
+                                                             size = c(2.5, 6.25, 10),
+                                                             alpha = c(0.5,0.5,0.5)
+                                                             #color = c("<100 mi" = "#EE5C42", "100-400 mi" = "#FFD700",">400 mi" = "#228B22")
+                                                             ))) +
+  theme_bw() + labs(x = NULL, y = NULL, tag = "* Direct Marketer") +
+  theme(legend.position = 'bottom',
+        plot.tag = element_text(color = "blue", size = 10, face = 'bold'),
+        plot.tag.position = c(0.18,0.06)) 
+
+ggsave(here("output_figs", "seafood_heatmap.png"), seafood_heatmap, width = 6, height = 5, units = "in", dpi = 300)
+
+median_footprint <- val_resp_data %>% 
+  select(ExternalReference, state, X6.5_1:X6.5_3) %>% 
+  rename('less_100_miles' = "X6.5_1",
+         '100_400_miles' = "X6.5_2",
+         'great_400_miles' = "X6.5_3") %>% 
+  pivot_longer(cols = c(less_100_miles:great_400_miles),
+               names_to = "Distance",
+               values_to = "Percent") %>% 
+  mutate(Distance = factor(Distance, 
+                           ordered = TRUE,
+                           levels = c("great_400_miles", "100_400_miles", "less_100_miles")),
+         Percent = as.numeric(Percent)) %>% 
+  drop_na() %>% 
+  group_by(Distance) %>% 
+  summarize(median = median(Percent),
+            mean = mean(Percent))
+
+```
+
+```{r heatmap}
+#| echo: false
+#| message: false
+#| fig-align: center
+#| include: true
+ggplot() +
+  geom_polygon(data = usa_50,
+               aes(long, lat, group = group),
+               color = "grey20",
+               fill = "grey60",
+               linewidth = 0.3) +
+  geom_sf(data = point_400mi, aes(fill = ">400 mi"), alpha = 0.1, color = NA, show.legend = "polygon") +
+  geom_sf(data = point_250mi, aes(fill = "100-400 mi"), alpha = 0.1, color = NA, show.legend = "polygon") +
+  geom_sf(data = point_100mi, aes(fill = "<100 mi"), alpha = 0.1, color = NA, show.legend = "polygon") +
+  geom_sf(data = points_sf, color = 'blue', size = 0.3) +
+  coord_sf(xlim = c(-179,-60), ylim = c(15,75), expand = FALSE) + 
+  scale_fill_manual(name = NULL, breaks = c("<100 mi", "100-400 mi", ">400 mi"),
+                    values = c(">400 mi" = "#228B22", "100-400 mi" = "#FFD700", "<100 mi" = "#EE5C42"),
+                    guide = guide_legend(override.aes = list(linetype = c("blank", "solid", "blank"),
+                                                             shape = c(20,20,20),
+                                                             size = c(2.5, 6.25, 10),
+                                                             alpha = c(0.5,0.5,0.5)
+                                                             #color = c("<100 mi" = "#EE5C42", "100-400 mi" = "#FFD700",">400 mi" = "#228B22")
+                                                             ))) +
+  theme_bw() + labs(x = NULL, y = NULL, tag = "* Direct Marketer") +
+  theme(legend.position = 'bottom',
+        plot.tag = element_text(color = "blue", size = 10, face = 'bold'),
+        plot.tag.position = c(0.18,0.06)) 
+```
+
+# Processing and Distribution
+
+```{r processing-distribution}
+#| echo: false
+#| message: false
+#| warning: false
+#| include: false
+View(val_resp_data %>% group_by(X6.6) %>% tally() %>% drop_na() %>% mutate(pct = n/sum(n)) %>% adorn_totals())
+
+View(val_resp_data %>% group_by(X6.7) %>% tally() %>% drop_na() %>% mutate(pct = n/sum(n)) %>% adorn_totals())
+```
+
+Processing and Distributing directly marketed seafood is mostly straightforward. **44%** of direct seafood businesses did not need to process their seafood products, while **32%** processed the seafood themselves. Similarly, **41%** of direct seafood businesses indicated that no packing or transportation was required for their seafood, while **32%** packed and shipped the seafood themselves.
+
+COLLABORATING PARTNERS \| FUNDING PARTNERS
+
+::: {layout-ncol="4"}
+![](images/UMaine_fullcrest_logo4c.png){width="471"} ![](images/Local_Catch_Network_Logo_Horizontal(1).png){width="956"} ![](images/NOAA_FISHERIES_H.png){width="346"} ![](images/usda-logo-color.png){width="219"}
+:::
+
+For more information please contact Sahir Advani (sahir.advani\@maine.edu) of Josh Stoll (joshua.stoll\@maine.edu). DOI: 10.17605/OSF.IO/YXTJ7
